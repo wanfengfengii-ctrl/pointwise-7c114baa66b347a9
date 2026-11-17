@@ -1,0 +1,116 @@
+{
+  "columns": [
+    "station",
+    "a",
+    "b"
+  ],
+  "batches": [
+    {
+      "id": "morning",
+      "operations": [
+        {
+          "op": "put",
+          "id": "x",
+          "values": {
+            "station": 1,
+            "a": 2,
+            "b": 20
+          }
+        },
+        {
+          "op": "put",
+          "id": "y",
+          "values": {
+            "station": 1,
+            "a": null,
+            "b": 30
+          }
+        },
+        {
+          "op": "put",
+          "id": "z",
+          "values": {
+            "station": 2,
+            "a": null,
+            "b": null
+          }
+        },
+        {
+          "op": "put",
+          "id": "w",
+          "values": {
+            "station": null,
+            "a": -5,
+            "b": 4
+          }
+        },
+        {
+          "op": "put",
+          "id": "q",
+          "values": {
+            "station": 2,
+            "a": 99,
+            "b": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "replace-x",
+      "operations": [
+        {
+          "op": "put",
+          "id": "x",
+          "values": {
+            "station": 1,
+            "a": -2,
+            "b": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "withdraw-q",
+      "operations": [
+        {
+          "op": "delete",
+          "id": "q"
+        }
+      ]
+    },
+    {
+      "id": "late-t",
+      "operations": [
+        {
+          "op": "put",
+          "id": "t",
+          "values": {
+            "station": 1,
+            "a": 2,
+            "b": 50
+          }
+        }
+      ]
+    }
+  ],
+  "expected": [
+    {
+      "group": null,
+      "rows": 1,
+      "non_null": 1,
+      "sum": -5
+    },
+    {
+      "group": 1,
+      "rows": 3,
+      "non_null": 2,
+      "sum": 0
+    },
+    {
+      "group": 2,
+      "rows": 1,
+      "non_null": 0,
+      "sum": null
+    }
+  ]
+}
