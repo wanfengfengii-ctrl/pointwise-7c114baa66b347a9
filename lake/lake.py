@@ -42,6 +42,9 @@ class Lake:
     def ingest(self, batch_id, operations):
         return self.admission.ingest(batch_id, operations)
 
+    def apply_patch(self, batch_id, changes):
+        return self.admission.apply_patch(batch_id, changes)
+
     def snapshot(self):
         return self.snapshots.current().to_descriptor()
 

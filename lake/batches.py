@@ -14,7 +14,7 @@ class PreparedBatch:
     def operations(self):
         operations = json.loads(self.canonical)
         for operation in operations:
-            if operation["op"] == "put":
+            if operation["op"] in ("put", "patch"):
                 operation["values"] = {
                     column: Schema.decode_value(value)
                     for column, value in operation["values"].items()}

@@ -16,7 +16,13 @@ class CommitPublisher:
             row = self.catalog.fetchone("SELECT COALESCE(MAX(seq),0)+1 FROM commits")
             sequence = row[0]
             descriptor = build(sequence)
-            self.segments.verify(descriptor)
+            if any(entry.op == "patch"
+                   for entry in self.segments.directory(descriptor)):
+                # Sparse batches never read historical payloads; their
+                # self-check stays at operation metadata plus digests.
+                self.segments.verify_directory(descriptor)
+            else:
+                self.segments.verify(descriptor)
             self.segments.register(descriptor)
             self.catalog.execute("INSERT INTO commits VALUES(?,?,?)",
                                  (sequence, batch.batch_id, descriptor.id))

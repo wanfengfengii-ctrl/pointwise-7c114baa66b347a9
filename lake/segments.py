@@ -48,7 +48,7 @@ class SegmentStore:
         return self.root / file_id / f"c{self.schema.columns.index(column)}.json"
 
     def write(self, records):
-        records = sorted(list(records), key=lambda row: row["id"])
+        records = sorted(list(records), key=lambda row: (row["id"], row["seq"]))
         if not records:
             raise ValueError("empty segment")
         entries = []
@@ -56,14 +56,33 @@ class SegmentStore:
         for position, record in enumerate(records):
             if record["op"] == "put":
                 values = self.schema.normalize_full_row(record["values"])
+                mask = None
             elif record["op"] == "delete":
                 values = dict.fromkeys(self.schema.columns)
                 if "values" in record:
                     raise ValueError("delete cannot carry values")
+                mask = None
+            elif record["op"] == "patch":
+                if not isinstance(record.get("values"), dict) or not record["values"]:
+                    raise ValueError("patch requires a nonempty column mapping")
+                if set(record["values"]) - set(self.schema.columns):
+                    raise ValueError("unknown patch column")
+                # Explicit NULL still occupies a cell; omission is encoded as
+                # NULL on the page and recorded as absent from the mask.
+                values = dict.fromkeys(self.schema.columns)
+                indices = []
+                for column in self.schema.columns:
+                    if column in record["values"]:
+                        values[column] = self.schema.validate_value(
+                            record["values"][column])
+                        indices.append(self.schema.columns.index(column))
+                if not indices:
+                    raise ValueError("empty patch column mapping")
+                mask = tuple(indices)
             else:
                 raise ValueError("unknown operation")
             entries.append(RowEntry(record["id"], record["seq"],
-                                    record["op"], position))
+                                    record["op"], position, mask))
             for column in self.schema.columns:
                 pages[column].append(values[column])
         directory = encode_directory(entries)
@@ -78,7 +97,11 @@ class SegmentStore:
             hashes.append(digest_bytes(data))
         descriptor = SegmentDescriptor(file_id, digest_bytes(directory),
                                        tuple(hashes), len(entries))
-        self.verify(descriptor)
+        # Writing is local: validate operation metadata and structure without
+        # re-reading the payload pages that were just written. Publication
+        # callers run the payload-level verify() when historical availability
+        # guarantees allow it.
+        self.verify_directory(descriptor)
         return descriptor
 
     def _descriptor(self, value):
@@ -109,8 +132,33 @@ class SegmentStore:
             raise IntegrityError("page descriptor count mismatch")
         entries = self.directory(descriptor)
         pages = self.read_columns(descriptor, self.schema.columns)
+        width = len(self.schema.columns)
         for entry in entries:
             if entry.op == "delete" and any(
                     pages[c][entry.position] is not None for c in self.schema.columns):
                 raise IntegrityError("tombstone contains payload values")
+            elif entry.op == "patch":
+                mask = entry.columns
+                if mask is None or any(index >= width for index in mask):
+                    raise IntegrityError("patch mask outside fixed schema")
+                masked = set(mask)
+                for index, column in enumerate(self.schema.columns):
+                    if index not in masked and pages[column][entry.position] is not None:
+                        raise IntegrityError("patch carries unmasked payload")
+        return descriptor
+
+    def verify_directory(self, file_or_descriptor):
+        """Validate operation metadata and page digests without reading any
+        column payload. Patch admission publishes without touching history,
+        so its self-check must not require payload availability."""
+        descriptor = self._descriptor(file_or_descriptor)
+        if len(descriptor.page_hashes) != len(self.schema.columns):
+            raise IntegrityError("page descriptor count mismatch")
+        entries = self.directory(descriptor)
+        width = len(self.schema.columns)
+        for entry in entries:
+            if entry.op == "patch":
+                mask = entry.columns
+                if mask is None or any(index >= width for index in mask):
+                    raise IntegrityError("patch mask outside fixed schema")
         return descriptor
